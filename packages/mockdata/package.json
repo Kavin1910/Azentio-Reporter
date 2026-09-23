@@ -1,0 +1,26 @@
+{
+  "name": "@azentio/mockdata",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/generate.ts",
+    "typecheck": "tsc --noEmit",
+    "e2e": "tsx src/e2e.ts",
+    "ui": "tsx src/ui-sources.ts",
+    "prod-checks": "tsx src/prod-checks.ts",
+    "screenshots": "tsx src/screenshot.ts",
+    "chatbench": "tsx src/chatbench.ts"
+  },
+  "dependencies": {
+    "@azentio/core": "workspace:*",
+    "@supabase/supabase-js": "^2.47.10",
+    "exceljs": "^4.4.0",
+    "@azentio/pipeline": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

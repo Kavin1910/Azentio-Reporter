@@ -1,0 +1,347 @@
+@import "tailwindcss";
+
+/* ===========================================================================
+   Azentio Reporter — design tokens
+
+   Palette is the supplied sage/forest range. Two colours are NOT in it and had
+   to be introduced: a warning and a danger. A reporting tool with an approval
+   queue needs three unambiguous states, and three greens cannot carry
+   pending/approved/rejected — colour would stop meaning anything. The additions
+   are desaturated earth tones chosen to sit inside the same family: an ochre
+   and a terracotta, not a safety-vest amber and a fire-engine red.
+
+   Every foreground token below clears 4.5:1 on its intended background. The
+   mid-tones (fern, ochre) are used for fills, borders and icons only — their
+   darker siblings carry text.
+   =========================================================================== */
+@theme {
+  /* --- supplied palette, verbatim ------------------------------------- */
+  --color-dust-100: #312e24;  --color-dust-200: #615b48;  --color-dust-300: #92896c;
+  --color-dust-400: #b6b09c;  --color-dust-500: #dad7cd;  --color-dust-600: #e2dfd7;
+  --color-dust-700: #e9e7e1;  --color-dust-800: #f0efeb;  --color-dust-900: #f8f7f5;
+
+  --color-sage-100: #212619;  --color-sage-200: #434c33;  --color-sage-300: #64724c;
+  --color-sage-400: #859865;  --color-sage-500: #a3b18a;  --color-sage-600: #b6c1a2;
+  --color-sage-700: #c8d0b9;  --color-sage-800: #dae0d0;  --color-sage-900: #edefe8;
+
+  --color-fern-100: #111911;  --color-fern-200: #233323;  --color-fern-300: #344c34;
+  --color-fern-400: #466645;  --color-fern-500: #588157;  --color-fern-600: #739f72;
+  --color-fern-700: #96b795;  --color-fern-800: #b9cfb9;  --color-fern-900: #dce7dc;
+
+  --color-hunter-100: #0c120d; --color-hunter-200: #172419; --color-hunter-300: #233626;
+  --color-hunter-400: #2e4833; --color-hunter-500: #3a5a40; --color-hunter-600: #56865f;
+  --color-hunter-700: #7aaa83; --color-hunter-800: #a7c7ac; --color-hunter-900: #d3e3d6;
+
+  --color-pine-100: #0a0f0d;  --color-pine-200: #141f1a;  --color-pine-300: #1f2e26;
+  --color-pine-400: #293d33;  --color-pine-500: #344e41;  --color-pine-600: #527a66;
+  --color-pine-700: #75a38c;  --color-pine-800: #a3c2b3;  --color-pine-900: #d1e0d9;
+
+  /* --- surfaces --------------------------------------------------------- */
+  --color-canvas:        #f6f5f1;   /* between dust 800 and 900 — warm, not white */
+  --color-canvas-sunken: #efeee8;
+  --color-paper:         #ffffff;
+  --color-paper-tint:    #fbfaf7;
+
+  /* --- lines ------------------------------------------------------------ */
+  --color-line:        #e5e2d9;
+  --color-line-soft:   #f0efe9;
+  --color-line-strong: #cdc8ba;
+
+  /* --- text ------------------------------------------------------------- */
+  --color-ink:       #101613;   /* 16.8:1 on canvas */
+  --color-ink-soft:  #29372f;   /*  9.9:1 */
+  --color-ink-muted: #56645b;   /*  5.3:1 */
+  --color-ink-faint: #7c8880;   /*  3.4:1 — decorative labels only, never body */
+
+  /* --- brand ------------------------------------------------------------ */
+  --color-brand:       #344e41;   /* pine_teal */
+  --color-brand-hover: #233626;   /* hunter 300 */
+  --color-brand-soft:  #edefe8;   /* sage 900 */
+  --color-brand-line:  #dae0d0;
+  --color-on-brand:    #ffffff;   /* 9.4:1 on brand */
+
+  --color-accent:      #588157;   /* fern — fills, borders, icons */
+  --color-accent-text: #344c34;   /* fern 300 — text weight, 7.6:1 */
+
+  /* --- state -----------------------------------------------------------
+     approved / pending / rejected. Hue AND shape both carry the meaning in
+     the UI, so colour is never the only signal.                          */
+  --color-ok:        #588157;  --color-ok-soft: #dce7dc;  --color-ok-text: #2f4530;
+  --color-pending:   #9a7b3f;  --color-pending-soft: #f5efe1; --color-pending-text: #6b5325;
+  --color-danger:    #9c4a3c;  --color-danger-soft: #f7ebe8;  --color-danger-text: #7a3629;
+
+  /* --- spacing: dense dashboard scale, 8→32 --------------------------- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-8: 32px;
+
+  --radius-sm: 6px; --radius: 10px; --radius-lg: 14px;
+
+  /* Elevation kept almost invisible — a premium surface reads through
+     hairlines and spacing, not drop shadows. */
+  --shadow-sm: 0 1px 2px rgba(16, 22, 19, .04);
+  --shadow:    0 2px 8px rgba(16, 22, 19, .06), 0 1px 2px rgba(16, 22, 19, .04);
+  --shadow-lg: 0 12px 32px rgba(16, 22, 19, .12), 0 2px 8px rgba(16, 22, 19, .06);
+}
+
+/* ---------------------------------------------------------------- base --- */
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Figures must align down a column and must not reflow as they animate. */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+.display {
+  font-family: var(--font-display), ui-serif, Georgia, serif;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+::selection { background: var(--color-sage-700); color: var(--color-pine-200); }
+
+/* Visible focus for keyboard users, suppressed for pointer users. */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===========================================================================
+   Component layer
+   =========================================================================== */
+
+/* --- surfaces ------------------------------------------------------------ */
+.surface {
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+}
+.surface-tint { background: var(--color-paper-tint); }
+
+.zone-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 999px;
+  background: var(--color-brand); color: var(--color-on-brand);
+  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.zone-num-idle { background: var(--color-dust-600); color: var(--color-ink-muted); }
+
+.label {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .1em;
+  color: var(--color-ink-faint);
+}
+
+/* --- buttons ------------------------------------------------------------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border-radius: var(--radius-sm);
+  padding: 8px 14px;
+  font-size: 13px; font-weight: 550;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, opacity .18s ease;
+  /* 44px touch target without inflating the visual box */
+  position: relative;
+}
+.btn::before {
+  content: ""; position: absolute; inset: -6px; /* expands the hit area only */
+}
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn-primary { background: var(--color-brand); color: var(--color-on-brand); }
+.btn-primary:hover:not(:disabled) { background: var(--color-brand-hover); }
+
+.btn-ghost {
+  background: var(--color-paper);
+  border-color: var(--color-line);
+  color: var(--color-ink-soft);
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--color-line-strong);
+  background: var(--color-paper-tint);
+}
+
+.btn-quiet { background: transparent; color: var(--color-ink-muted); padding: 6px 8px; }
+.btn-quiet:hover:not(:disabled) { background: var(--color-canvas-sunken); color: var(--color-ink); }
+
+/* The Structure button — the one action the whole screen is built around. */
+.btn-hero {
+  background: var(--color-brand);
+  color: var(--color-on-brand);
+  padding: 11px 22px;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  box-shadow: var(--shadow);
+}
+.btn-hero:hover:not(:disabled) { background: var(--color-brand-hover); box-shadow: var(--shadow-lg); }
+
+/* --- state chips ---------------------------------------------------------
+   Each chip carries a glyph as well as a hue, so the state survives
+   greyscale printing and colour-blind vision.                             */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; letter-spacing: .01em;
+  white-space: nowrap;
+}
+.chip-ok      { background: var(--color-ok-soft);      color: var(--color-ok-text); }
+.chip-pending { background: var(--color-pending-soft); color: var(--color-pending-text); }
+.chip-danger  { background: var(--color-danger-soft);  color: var(--color-danger-text); }
+.chip-neutral { background: var(--color-canvas-sunken); color: var(--color-ink-muted); }
+
+/* --- inputs -------------------------------------------------------------- */
+.field {
+  width: 100%;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  padding: 8px 11px;
+  font-size: 13px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.field::placeholder { color: var(--color-ink-faint); }
+.field:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-soft);
+}
+.field:disabled { background: var(--color-canvas-sunken); color: var(--color-ink-faint); }
+
+/* --- tooltips ------------------------------------------------------------
+   Rendered by <TooltipLayer/> at the document root (see components/
+   tooltip-layer.tsx). The previous ::after approach was clipped by every
+   overflow:hidden ancestor and could not avoid the viewport edge.           */
+
+/* --- drag & drop --------------------------------------------------------- */
+.dropzone {
+  border: 1.5px dashed var(--color-line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--color-paper-tint);
+  transition: border-color .18s ease, background .18s ease;
+}
+.dropzone-active {
+  border-color: var(--color-accent);
+  background: var(--color-sage-900);
+}
+
+.drag-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+  font-size: 12px;
+  cursor: grab;
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.drag-chip:hover { border-color: var(--color-sage-500); box-shadow: var(--shadow-sm); }
+.drag-chip:active { cursor: grabbing; }
+.drag-chip-ghost { opacity: .4; }
+
+.drop-slot {
+  border: 1px dashed var(--color-line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--color-canvas-sunken);
+  transition: border-color .15s ease, background .15s ease;
+}
+.drop-slot-over {
+  border-color: var(--color-accent);
+  border-style: solid;
+  background: var(--color-sage-900);
+}
+
+/* --- meters -------------------------------------------------------------- */
+.meter { height: 4px; background: var(--color-dust-700); border-radius: 999px; overflow: hidden; }
+.meter > i { display: block; height: 100%; border-radius: 999px; transition: width .4s cubic-bezier(.4,0,.2,1); }
+
+/* --- tables -------------------------------------------------------------- */
+.grid-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.grid-table th {
+  position: sticky; top: 0; z-index: 1;
+  background: var(--color-canvas-sunken);
+  border-bottom: 1px solid var(--color-line);
+  padding: 7px 10px;
+  text-align: left;
+  font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--color-ink-faint);
+  white-space: nowrap;
+}
+.grid-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--color-line-soft);
+  color: var(--color-ink-soft);
+  white-space: nowrap;
+}
+.grid-table tbody tr:hover td { background: var(--color-paper-tint); }
+.grid-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Raw preview keeps the mess legible — junk rows are dimmed, not hidden. */
+.raw-junk td { color: var(--color-ink-faint); background: repeating-linear-gradient(
+  45deg, transparent, transparent 6px, rgba(156,74,60,.04) 6px, rgba(156,74,60,.04) 12px); }
+
+/* --- scrollbars ---------------------------------------------------------- */
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-dust-500) transparent; }
+.scroll-thin::-webkit-scrollbar { width: 9px; height: 9px; }
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--color-dust-500); border-radius: 999px;
+  border: 2px solid var(--color-canvas);
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: var(--color-dust-400); }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+
+/* --- motion -------------------------------------------------------------- */
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise .28s cubic-bezier(.4,0,.2,1) both; }
+
+@keyframes pulse-soft { 0%,100% { opacity: 1 } 50% { opacity: .55 } }
+.pulsing { animation: pulse-soft 1.4s ease-in-out infinite; }
+
+@keyframes dots { 0%,80%,100% { opacity: .25 } 40% { opacity: 1 } }
+.typing > i {
+  display: inline-block; width: 4px; height: 4px; margin-right: 3px;
+  border-radius: 50%; background: var(--color-ink-faint);
+  animation: dots 1.3s infinite;
+}
+.typing > i:nth-child(2) { animation-delay: .18s }
+.typing > i:nth-child(3) { animation-delay: .36s }
+
+/* --- print: the report section is the document ---------------------------- */
+@media print {
+  @page { margin: 14mm 12mm; }
+  body { background: #fff; }
+  header, aside, .no-print, section:not(#report) { display: none !important; }
+  main { display: block !important; max-width: none !important; padding: 0 !important; }
+  #report { border: 0 !important; }
+  .print-keep { break-inside: avoid; }
+  .scroll-thin { max-height: none !important; overflow: visible !important; }
+}
+
+/* --- push-to-talk ----------------------------------------------------------
+   The mic swells while held so the user can see it is live without looking
+   at the transcript. */
+@keyframes ptt-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(88,129,87,.45); }
+  70%  { box-shadow: 0 0 0 10px rgba(88,129,87,0); }
+  100% { box-shadow: 0 0 0 0 rgba(88,129,87,0); }
+}
+.ptt-live { animation: ptt-ring 1.2s ease-out infinite; background: var(--color-accent) !important; color: #fff !important; }
+.ptt-btn { touch-action: none; user-select: none; -webkit-user-select: none; }

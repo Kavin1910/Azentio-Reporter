@@ -1,0 +1,20 @@
+{
+  "name": "azentio-loan-platform",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "pnpm --filter @azentio/reporter dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "mock:generate": "pnpm --filter @azentio/mockdata generate",
+    "start": "pnpm --filter @azentio/reporter start",
+    "e2e": "pnpm --filter @azentio/mockdata e2e",
+    "e2e:ui": "pnpm --filter @azentio/mockdata ui",
+    "e2e:prod": "pnpm --filter @azentio/mockdata prod-checks"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@11.24.0"
+}

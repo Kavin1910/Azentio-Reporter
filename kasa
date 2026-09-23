@@ -1,0 +1,63 @@
+
+
+
+
+Requirement:
+
+Reporting Application
+
+Intent is only to generate report.
+
+How it generates:
+Multiple unstructured data schema from the database.
+
+Need one screen which will - On click of a button which will read the unstructured schema and put it structured.
+
+
+The db have 2 million records..
+
+
+Template is 10 or 15 - On that click, should be mapped agaonst the columns or schema 
+ 
+ It should be editable also.
+
+
+ when u generate the report, should be between the time range....
+
+
+ Mock Data: Take some excel and add some columns, Actually add values in it, accross all columns , feed it to a knowledge base to your application.
+
+
+ Drag & Drop
+
+
+whenever there is a new field
+ whenever there is a calculation , there is a field called age, it should map the value.
+
+
+
+ db should be excek or csv
+
+
+
+report layer
+ button called strcuture
+
+ column name matched with template
+
+
+ report 
+
+
+ configuration - public
+
+ calculation
+
+
+
+
+Very Much - RAG
+
+
+
+
