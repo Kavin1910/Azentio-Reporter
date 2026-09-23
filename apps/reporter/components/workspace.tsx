@@ -289,7 +289,7 @@ function SourceZone({ data, run, busy, onStructured }: { data: WorkspaceData; ru
 
   const TABS: Array<{ key: typeof tab; label: string; tip: string; count?: number }> = [
     { key: 'upload',   label: 'Upload a file',      tip: 'Drop a .xlsx or .csv, or load a sample' },
-    { key: 'database', label: 'Connect a database', tip: 'Read a table or query from your own PostgreSQL', count: dbSources || undefined },
+    { key: 'database', label: 'Connect Supabase',   tip: 'Paste a project URL and API key, pull the schema, import a table', count: dbSources || undefined },
     { key: 'saved',    label: 'Saved datasets',     tip: 'Everything already stored in the platform database', count: data.datasets.length || undefined },
   ];
 

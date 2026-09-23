@@ -155,29 +155,46 @@ export async function generateReport(datasetId: string, templateCode: string, fi
 
 /* ==================================================================== sources */
 
+/**
+ * Supabase only, two ways in:
+ *  - rest: project URL + API key. Schema from PostgREST's OpenAPI document,
+ *          rows over REST. No database password, no open port.
+ *  - pg:   the connection string Supabase's Connect dialog prints. Needed only
+ *          for SQL queries; host must be a Supabase host.
+ */
 export type ConnectionForm = {
-  url?: string; host?: string; port?: string; database?: string; user?: string; password?: string; ssl?: boolean;
-  /** Reuse the saved password when the form leaves it blank. */
+  mode: 'rest' | 'pg';
+  url?: string;          // rest: https://<ref>.supabase.co
+  apiKey?: string;       // rest
+  schema?: string;       // rest, default public
+  connectionString?: string; // pg: postgresql://postgres.<ref>:…@…pooler.supabase.com:6543/postgres
+  /** Reuse the saved secret when the form leaves it blank. */
   sourceId?: string | null;
 };
 
-async function connectionInput(sb: Awaited<ReturnType<typeof client>>['sb'], f: ConnectionForm): Promise<P.PgConnectionInput> {
-  let input: P.PgConnectionInput;
-  if (f.url?.trim()) input = P.parseConnectionUrl(f.url);
-  else if (f.sourceId && !f.password) { assertUuid(f.sourceId, 'connection'); input = (await P.connectionFor(sb, f.sourceId)).input; }
-  else {
-    if (!f.host || !f.database || !f.user) throw new Error('Host, database and user are required.');
-    input = { host: f.host.trim(), port: Number(f.port) || 5432, database: f.database.trim(), user: f.user.trim(), password: f.password ?? '', ssl: !!f.ssl };
+type Resolved = { mode: 'rest'; rest: P.SupabaseRestInput } | { mode: 'pg'; pg: P.PgConnectionInput };
+
+async function resolveConnection(sb: Awaited<ReturnType<typeof client>>['sb'], f: ConnectionForm): Promise<Resolved> {
+  if (f.mode === 'rest') {
+    if (f.sourceId && !f.apiKey) { assertUuid(f.sourceId, 'connection'); return { mode: 'rest', rest: await P.supabaseInputFor(sb, f.sourceId) }; }
+    if (!f.url?.trim() || !f.apiKey?.trim()) throw new Error('Project URL and API key are required.');
+    return { mode: 'rest', rest: { url: f.url, apiKey: f.apiKey, schema: f.schema } };
   }
-  P.assertAllowedHost(input.host);
-  return input;
+  let pg: P.PgConnectionInput;
+  if (f.sourceId && !f.connectionString) { assertUuid(f.sourceId, 'connection'); pg = (await P.connectionFor(sb, f.sourceId)).input; }
+  else {
+    if (!f.connectionString?.trim()) throw new Error('Paste the connection string from Supabase → Connect.');
+    pg = P.parseConnectionUrl(f.connectionString);
+  }
+  P.assertSupabaseHost(pg.host);
+  return { mode: 'pg', pg };
 }
 
-export async function testConnection(form: ConnectionForm): Promise<ActionResult<P.TestResult>> {
+export async function testConnection(form: ConnectionForm): Promise<ActionResult<P.TestResult & { detail?: P.SupabaseTable[] }>> {
   return safe(async () => {
     const { sb } = await client();
-    const input = await connectionInput(sb, form);
-    const result = await P.testPostgres(input);
+    const c = await resolveConnection(sb, form);
+    const result = c.mode === 'rest' ? await P.supabaseSchema(c.rest) : await P.testPostgres(c.pg);
     if (form.sourceId) await P.recordTest(sb, form.sourceId, result);
     return result;
   });
@@ -186,10 +203,13 @@ export async function testConnection(form: ConnectionForm): Promise<ActionResult
 export async function saveConnection(form: ConnectionForm, name: string): Promise<ActionResult<{ sourceId: string; test: P.TestResult }>> {
   return safe(async () => {
     const { sb, userId } = await client();
-    const input = await connectionInput(sb, form);
-    const test = await P.testPostgres(input);
+    const c = await resolveConnection(sb, form);
+    const test = c.mode === 'rest' ? await P.supabaseSchema(c.rest) : await P.testPostgres(c.pg);
     if (!test.ok) throw new Error(`Not saved — ${test.note}`);
-    const sourceId = await P.saveConnection(sb, userId, name.trim() || `${input.database}@${input.host}`, input, test, form.sourceId ?? null);
+    const label = name.trim() || (c.mode === 'rest' ? new URL(P.parseSupabaseUrl(c.rest.url)).hostname.split('.')[0]! : `${c.pg.database}@${c.pg.host}`);
+    const sourceId = c.mode === 'rest'
+      ? await P.saveSupabaseConnection(sb, userId, label, c.rest, test, form.sourceId ?? null)
+      : await P.saveConnection(sb, userId, label, c.pg, test, form.sourceId ?? null);
     return { sourceId, test };
   });
 }
@@ -199,12 +219,16 @@ export async function importFromConnection(
 ): Promise<ActionResult<P.ImportResult>> {
   return safe(async () => {
     const { sb, userId } = await client();
-    const input = await connectionInput(sb, form);
+    const c = await resolveConnection(sb, form);
     const label = name.trim() || target.table || 'query';
-    const result = await P.importFromPostgres(sb, userId, input, target, form.sourceId ?? null, label);
+    if (c.mode === 'rest') {
+      if (!target.table) throw new Error('Choose a table. SQL queries need the connection-string mode.');
+      return P.importFromSupabase(sb, userId, { ...c.rest, schema: target.schema ?? c.rest.schema }, target.table, form.sourceId ?? null, label);
+    }
+    const result = await P.importFromPostgres(sb, userId, c.pg, target, form.sourceId ?? null, label);
     if (form.sourceId) {
       await sb.from('data_sources').update({
-        config: { host: input.host, port: input.port, database: input.database, user: input.user, ssl: input.ssl, table: target.table, query: target.query },
+        config: { host: c.pg.host, port: c.pg.port, database: c.pg.database, user: c.pg.user, ssl: c.pg.ssl, table: target.table, query: target.query },
       } as any).eq('id', form.sourceId);
     }
     return result;

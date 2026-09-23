@@ -66,32 +66,29 @@ async function main() {
   check('saved tab lists the upload', /bureau_extract\.xlsx/.test(String(await ev('document.body.innerText'))));
   await snap('source-saved');
 
-  console.log('\nSource · connect a database (local Postgres on :5433)');
-  await clickText('button', 'Connect a database'); await wait(400);
-  const hasNewBtn = await clickText('button', '+ New connection'); if (hasNewBtn) await wait(300);
-  await type('input[placeholder="db.example.com"]', '127.0.0.1');
-  await ev(`(() => { const el=[...document.querySelectorAll('input')].find(i => i.value==='5432'); if(!el) return false; const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(el,'5433'); el.dispatchEvent(new Event('input',{bubbles:true})); return true; })()`);
-  await type('input[placeholder="postgres"]', 'customer_bank');
-  await ev(`(() => { const labels=[...document.querySelectorAll('label')]; const l=labels.find(x=>/^User/.test(x.textContent)); const el=l?.querySelector('input'); if(!el) return false; const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(el,'postgres'); el.dispatchEvent(new Event('input',{bubbles:true})); return true; })()`);
-  await ev(`(() => { const el=[...document.querySelectorAll('input[type=checkbox]')][0]; if (el && el.checked) el.click(); return true; })()`);   // local: no SSL
-  await ev(`(() => { const el=document.querySelector('input[type=password]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(el,'x'); el.dispatchEvent(new Event('input',{bubbles:true})); return true; })()`); // trust auth ignores it
-  const clickedTest = await clickText('button', 'Test connection');
-  check('Test connection button enabled and clicked', !!clickedTest);
-  let text = '';
-  for (let i = 0; i < 30; i++) { await wait(500); text = String(await ev('document.body.innerText')); if (/Connected|Connection failed/.test(text)) break; }
-  check('connection tested OK and tables listed', /Connected/.test(text) && /loan_accounts/.test(text), (text.match(/Connected in \d+ms[^\n]*/) ?? [''])[0]);
-  await snap('source-database-tested');
-
+  console.log('\nSource · connect Supabase (this workspace\'s own project, via REST)');
+  const svc = requireEnv(loadEnv(), ['SUPABASE_SERVICE_ROLE_KEY']).SUPABASE_SERVICE_ROLE_KEY!;
+  await clickText('button', 'Connect Supabase'); await wait(400);
+  const hasNewBtn = await clickText('button', '+ New connection'); if (hasNewBtn === true) await wait(300);
+  await type('input[placeholder="https://abcd1234.supabase.co"]', env.NEXT_PUBLIC_SUPABASE_URL!);
+  await ev(`(() => { const el=document.querySelector('input[type=password]'); const set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set; set.call(el,${JSON.stringify(svc)}); el.dispatchEvent(new Event('input',{bubbles:true})); return true; })()`);
   await idle();
-  const picked = await ev(`(() => { const sel=[...document.querySelectorAll('select')].find(s=>[...s.options].some(o=>/loan_accounts/.test(o.value))); if(!sel) return false; sel.value=[...sel.options].find(o=>/loan_accounts/.test(o.value)).value; sel.dispatchEvent(new Event('change',{bubbles:true})); return true; })()`);
-  check('table picker offers loan_accounts', !!picked);
-  await type('input[placeholder="loan_accounts"]', 'customer loans');
+  const clickedTest = await clickText('button', 'Get schema');
+  check('Get schema button enabled and clicked', clickedTest === true, String(clickedTest));
+  let text = '';
+  for (let i = 0; i < 40; i++) { await wait(500); text = String(await ev('document.body.innerText')); if (/Connected|Could not connect/.test(text)) break; }
+  check('schema read: tables listed with columns', /Connected/.test(text) && /report_templates/.test(text) && /datasets/.test(text), (text.match(/Connected in \d+ms[^\n]*/) ?? [''])[0]);
+  await snap('source-supabase-schema');
+  await idle();
+  const picked = await ev(`(() => { const row=[...document.querySelectorAll('tr')].find(r => r.textContent.trim().startsWith('report_templates')); if(!row) return false; row.click(); return true; })()`);
+  check('clicking a table shows its columns', picked === true && /fields/.test(String(await ev('document.body.innerText'))));
+  await type('input[placeholder="report_templates"]', 'templates via supabase');
   const clickedImport = await clickText('button', 'Import as dataset');
   check('Import button enabled and clicked', clickedImport === true, String(clickedImport));
   landed = false;
-  for (let i = 0; i < 120 && !landed; i++) { await wait(500); const b = String(await ev('document.body.innerText')); landed = /customer loans/i.test(b) && /1,201 raw rows/.test(b); if (/Something went wrong|failed|error/i.test(b) && !/last_test/i.test(b)) { console.log('   page says:', (b.match(/[^\n]*(error|failed|wrong)[^\n]*/i) ?? [''])[0].slice(0, 160)); } }
-  check('database import created a dataset with header + 1,200 rows', landed, landed ? '' : String(await ev('location.href')).replace(APP, ''));
-  await snap('source-database-imported');
+  for (let i = 0; i < 80 && !landed; i++) { await wait(500); const b = String(await ev('document.body.innerText')); landed = /templates via supabase/i.test(b) && /13 raw rows/.test(b); }
+  check('Supabase import created a dataset (header + 12 rows)', landed, landed ? '' : String(await ev('location.href')).replace(APP, ''));
+  await snap('source-supabase-imported');
 
   console.log('\nChat · composer layout');
   // The assistant only mounts on a structured dataset.

@@ -289,3 +289,180 @@ export async function recordTest(sb: Client, sourceId: string, test: TestResult)
     last_tested_at: new Date().toISOString(), last_test_ok: test.ok, last_test_note: test.note,
   } as any).eq('id', sourceId);
 }
+
+/* ================================================================ supabase */
+
+/**
+ * Supabase over its REST layer (PostgREST). Needs only the project URL and an
+ * API key — no database password, no driver, no open port. The schema comes
+ * from the OpenAPI document PostgREST publishes at /rest/v1/, which lists
+ * every table the key can see with its columns and types.
+ *
+ * Which key: service_role sees everything and bypasses RLS — right for an
+ * owner importing their own data. anon sees only what RLS exposes to the
+ * public, which is usually nothing; the schema will come back near-empty.
+ */
+
+export interface SupabaseRestInput { url: string; apiKey: string; schema?: string }
+
+export interface SupabaseColumn { name: string; type: string; format: string; required: boolean; description?: string }
+export interface SupabaseTable { name: string; columns: SupabaseColumn[]; rows_estimate: number | null }
+
+export function parseSupabaseUrl(raw: string): string {
+  let u: URL;
+  try { u = new URL(raw.trim()); } catch { throw new Error('Enter the project URL, e.g. https://abcd1234.supabase.co'); }
+  if (u.protocol !== 'https:') throw new Error('The Supabase project URL must start with https://');
+  if (!/\.supabase\.(co|in|red)$/.test(u.hostname) && process.env.ALLOW_PRIVATE_DB_HOSTS !== 'true') {
+    throw new Error('Only Supabase project URLs (…supabase.co) are accepted here.');
+  }
+  return `${u.protocol}//${u.host}`;
+}
+
+const restHeaders = (apiKey: string, schema = 'public') => ({
+  apikey: apiKey, Authorization: `Bearer ${apiKey}`, 'Accept-Profile': schema, 'Content-Profile': schema,
+});
+
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 10_000): Promise<Response> {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { ...init, signal: c.signal }); }
+  finally { clearTimeout(t); }
+}
+
+/** OpenAPI `format` → the structurer's column vocabulary, for the schema view. */
+function pgFormatToType(format: string): string {
+  const f = format.toLowerCase();
+  if (/timestamp|^date$/.test(f)) return 'date';
+  if (/int|numeric|decimal|real|double|money/.test(f)) return 'number';
+  if (/bool/.test(f)) return 'boolean';
+  if (/json/.test(f)) return 'json';
+  if (/uuid/.test(f)) return 'uuid';
+  return 'text';
+}
+
+export async function supabaseSchema(input: SupabaseRestInput): Promise<TestResult & { tables?: TableInfo[]; detail?: SupabaseTable[] }> {
+  const t0 = Date.now();
+  const schema = input.schema?.trim() || 'public';
+  let base: string;
+  try { base = parseSupabaseUrl(input.url); } catch (e) { return { ok: false, ms: 0, note: (e as Error).message }; }
+  if (!input.apiKey?.trim()) return { ok: false, ms: 0, note: 'An API key is required (Project Settings → API).' };
+
+  let res: Response;
+  try { res = await fetchWithTimeout(`${base}/rest/v1/`, { headers: restHeaders(input.apiKey.trim(), schema) }); }
+  catch (e) { return { ok: false, ms: Date.now() - t0, note: /abort/i.test(String(e)) ? 'Timed out reaching the project.' : `Could not reach the project: ${(e as Error).message}` }; }
+
+  if (res.status === 401 || res.status === 403) return { ok: false, ms: Date.now() - t0, note: 'The API key was rejected. Check it is the anon or service_role key for this project.' };
+  if (!res.ok) return { ok: false, ms: Date.now() - t0, note: `Supabase answered ${res.status}. Is the URL the project URL (…supabase.co) rather than the dashboard?` };
+
+  let spec: any;
+  try { spec = await res.json(); } catch { return { ok: false, ms: Date.now() - t0, note: 'Unexpected response — not a Supabase REST endpoint.' }; }
+
+  const defs: Record<string, any> = spec.definitions ?? spec.components?.schemas ?? {};
+  const detail: SupabaseTable[] = Object.entries(defs).map(([name, d]) => {
+    const required = new Set<string>(d.required ?? []);
+    const columns: SupabaseColumn[] = Object.entries(d.properties ?? {}).map(([col, p]: [string, any]) => ({
+      name: col, format: String(p.format ?? p.type ?? ''), type: pgFormatToType(String(p.format ?? p.type ?? '')),
+      required: required.has(col), description: p.description,
+    }));
+    return { name, columns, rows_estimate: null };
+  }).sort((a, b) => a.name.localeCompare(b.name));
+
+  // Row estimates: one HEAD per table, in parallel, best effort.
+  await Promise.all(detail.slice(0, 60).map(async (t) => {
+    try {
+      const r = await fetchWithTimeout(`${base}/rest/v1/${encodeURIComponent(t.name)}?select=*`, {
+        method: 'HEAD', headers: { ...restHeaders(input.apiKey.trim(), schema), Prefer: 'count=estimated', Range: '0-0' },
+      }, 6000);
+      const cr = r.headers.get('content-range');
+      const total = cr?.split('/')[1];
+      if (total && total !== '*') t.rows_estimate = Number(total);
+    } catch { /* estimate stays unknown */ }
+  }));
+
+  const ref = new URL(base).hostname.split('.')[0];
+  return {
+    ok: true, ms: Date.now() - t0,
+    version: `Supabase · ${ref}`,
+    note: `Connected in ${Date.now() - t0}ms · ${detail.length} table${detail.length === 1 ? '' : 's'} in schema "${schema}"` +
+      (detail.length === 0 ? ' — with the anon key RLS usually hides everything; use the service_role key to import your own data' : ''),
+    tables: detail.map((t) => ({ schema, name: t.name, rows_estimate: t.rows_estimate })),
+    detail,
+  };
+}
+
+const PAGE = 1000;
+
+/** Pulls a table through REST in pages and lands it as a dataset, header row first. */
+export async function importFromSupabase(
+  sb: Client, userId: string, input: SupabaseRestInput, table: string, sourceId: string | null, name: string,
+): Promise<ImportResult> {
+  const base = parseSupabaseUrl(input.url);
+  const schema = input.schema?.trim() || 'public';
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error('Invalid table name.');
+
+  const rows: Record<string, unknown>[] = [];
+  for (let from = 0; from < MAX_IMPORT_ROWS; from += PAGE) {
+    const r = await fetchWithTimeout(`${base}/rest/v1/${encodeURIComponent(table)}?select=*`, {
+      headers: { ...restHeaders(input.apiKey.trim(), schema), Range: `${from}-${from + PAGE - 1}`, 'Range-Unit': 'items' },
+    }, 20_000);
+    if (r.status === 416) break;                       // past the end
+    if (!r.ok) throw new Error(`Supabase answered ${r.status} while reading "${table}".`);
+    const page = (await r.json()) as Record<string, unknown>[];
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+
+  // Column order from the first row, widened by any later keys.
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rows) for (const k of Object.keys(r)) if (!seen.has(k)) { seen.add(k); keys.push(k); }
+  if (keys.length === 0) throw new Error(`"${table}" returned no rows or no columns the key can read.`);
+
+  const grid: RawCell[][] = [keys, ...rows.map((r) => keys.map((k) => toCell(r[k])))];
+  const datasetId = await persistUpload(sb, userId, `${name}.supabase`, grid, table, sourceId);
+  if (sourceId) await sb.from('data_sources').update({ last_imported_at: new Date().toISOString() } as any).eq('id', sourceId);
+  return { datasetId, rows: rows.length, columns: keys.length, truncated: rows.length >= MAX_IMPORT_ROWS };
+}
+
+/** Saved Supabase (REST) connection: URL in config, API key encrypted. */
+export async function saveSupabaseConnection(
+  sb: Client, userId: string, name: string, input: SupabaseRestInput, test: TestResult, existingId?: string | null,
+): Promise<string> {
+  const base = parseSupabaseUrl(input.url);
+  const row = {
+    owner_id: userId, kind: 'postgres', name,
+    config: { mode: 'rest', url: base, schema: input.schema?.trim() || 'public', host: new URL(base).hostname, port: 443, database: 'postgres', user: 'api-key', ssl: true },
+    secret_enc: encryptSecret(input.apiKey.trim()),
+    last_tested_at: new Date().toISOString(), last_test_ok: test.ok, last_test_note: test.note,
+  };
+  const r = existingId
+    ? await sb.from('data_sources').update(row as any).eq('id', existingId).select('id').single()
+    : await sb.from('data_sources').insert(row as any).select('id').single();
+  if (r.error || !r.data) throw new Error(r.error?.message ?? 'Could not save the connection.');
+  return r.data.id;
+}
+
+export async function supabaseInputFor(sb: Client, sourceId: string): Promise<SupabaseRestInput> {
+  const { data, error } = await sb.from('data_sources').select('*').eq('id', sourceId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Connection not found.');
+  const s = data as DataSource;
+  const cfg = s.config as unknown as { mode?: string; url?: string; schema?: string };
+  if (cfg.mode !== 'rest' || !cfg.url) throw new Error('This saved connection is a connection-string connection, not a project URL.');
+  if (!s.secret_enc) throw new Error('This connection has no saved key — enter it again.');
+  return { url: cfg.url, apiKey: decryptSecret(s.secret_enc), schema: cfg.schema };
+}
+
+/**
+ * Supabase-only policy for the connection-string mode. The direct host is
+ * db.<ref>.supabase.co and the pooler is *.pooler.supabase.com; anything else
+ * is refused unless the dev-only override is set.
+ */
+export function assertSupabaseHost(host: string): void {
+  const h = host.trim().toLowerCase();
+  const ok = /\.supabase\.(co|in|red)$/.test(h) || /\.pooler\.supabase\.com$/.test(h);
+  if (!ok && process.env.ALLOW_PRIVATE_DB_HOSTS !== 'true') {
+    throw new Error('Only Supabase database hosts are accepted here (db.<ref>.supabase.co or the pooler).');
+  }
+  assertAllowedHost(host);
+}
